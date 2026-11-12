@@ -1,6 +1,6 @@
 // Permet d'ouvrir le carnet sans internet (les recettes, elles, sont toujours sur la tablette).
-const CACHE = "carnet-v2";
-const SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
+const CACHE = "carnet-v4";
+const SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "pdf-lib.min.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
