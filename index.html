@@ -171,7 +171,7 @@ const TEMPS = [120,150,160,170,180,190,200,210,220,240];
 const DUR_PRESETS = [[0,5],[0,10],[0,15],[0,20],[0,30],[0,45],[1,0],[1,30],[2,0],[3,0]];
 const BACKUP_MAIN = "carnet-recettes-sauvegarde.json";
 // ⚠️ À changer à chaque mise à jour publiée sur GitHub
-const APP_VERSION = "1.6";
+const APP_VERSION = "1.7";
 const APP_DATE = "12/11/2026";
 
 /* ================= Stockage sur la tablette (IndexedDB) ================= */
@@ -692,15 +692,11 @@ function showPdfActions(){
   const el=$("#pdfout"); if(!el||!lastPdf) return;
   let file=null; try{ file=new File([lastPdf.blob],lastPdf.name,{type:"application/pdf"}); }catch(e){}
   const canShare=!!(file&&navigator.canShare&&navigator.canShare({files:[file]}));
-  const canSave=!!window.showSaveFilePicker || !STANDALONE;
   el.innerHTML=`<div class="banner ok" style="flex-direction:column;align-items:stretch">
-    <span class="t" style="flex:none">📖 Le livret est prêt ! Touchez « Voir le livret » : la page qui s'ouvre permet de l'enregistrer ou de l'imprimer.${STANDALONE?" Ensuite, touchez « retour » pour revenir au carnet.":""}</span>
-    <div class="row"><button class="btn primary big" id="pop">👁 Voir le livret</button>
-    ${canSave?`<button class="btn" id="psv">💾 Enregistrer</button>`:""}
+    <span class="t" style="flex:none">📖 Le livret est prêt !</span>
+    <div class="row"><button class="btn primary big" id="pop">⬇ Télécharger le livret</button>
     ${canShare?`<button class="btn" id="psh">↗ Partager / imprimer</button>`:""}</div></div>`;
   $("#pop").onclick=()=>openBlob(lastPdf.blob);
-  if(canSave) $("#psv").onclick=async()=>{ const h=await askSaveHandle(lastPdf.name,"application/pdf",".pdf","Livret PDF"); if(h==="cancel") return;
-    try{ const r=await saveFile(lastPdf.blob,lastPdf.name,h); if(r==="saved") toast("Livret enregistré ✔"); }catch(e){ toast("L'enregistrement n'a pas marché : utilisez « Voir le livret »."); } };
   if(canShare) $("#psh").onclick=()=>navigator.share({files:[file],title:livre.titre||"Livret"}).catch(()=>{});
 }
 async function buildPdf(sel,progress){
