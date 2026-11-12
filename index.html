@@ -136,6 +136,7 @@ textarea.tinput{min-height:90px;resize:none;line-height:1.4;font-size:19px}
 .banner .t{flex:1 1 260px;font-weight:700}
 .banner.ok{background:#eef5ec;border-color:#bcd6b6}
 .save-sec{margin-top:34px}
+.version{text-align:center;color:var(--mute);font-size:14px;margin:26px 0 0}
 .save-sec .st{font-weight:700;margin-bottom:12px}
 </style>
 </head>
@@ -169,6 +170,9 @@ const MODE_EMOJI = {"Four":"🔥","Poêle":"🍳","Casserole":"🥘","Cocotte":"
 const TEMPS = [120,150,160,170,180,190,200,210,220,240];
 const DUR_PRESETS = [[0,5],[0,10],[0,15],[0,20],[0,30],[0,45],[1,0],[1,30],[2,0],[3,0]];
 const BACKUP_MAIN = "carnet-recettes-sauvegarde.json";
+// ⚠️ À changer à chaque mise à jour publiée sur GitHub
+const APP_VERSION = "1.6";
+const APP_DATE = "12/11/2026";
 
 /* ================= Stockage sur la tablette (IndexedDB) ================= */
 const store = (()=>{
@@ -212,6 +216,21 @@ const norm=s=>String(s??"").toLowerCase().replace(/œ/g,"oe").replace(/æ/g,"ae"
 const lcFirst=s=>s? s.charAt(0).toLowerCase()+s.slice(1):s;
 function toast(t,ms=2600){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),ms);}
 function ask(title,text,okLbl,danger){return new Promise(res=>{const v=document.createElement("div");v.className="veil";v.innerHTML=`<div class="dlg"><h3>${esc(title)}</h3><div>${esc(text)}</div><div class="row"><button class="btn" data-a="0">Annuler</button><button class="btn ${danger?'danger':'primary'}" data-a="1">${esc(okLbl)}</button></div></div>`;v.onclick=e=>{const a=e.target.closest("[data-a]");if(a||e.target===v){v.remove();res(a&&a.dataset.a==="1");}};document.body.appendChild(v);});}
+const STANDALONE = (window.matchMedia&&matchMedia("(display-mode: standalone)").matches) || navigator.standalone===true;
+// Enregistrer un fichier de la façon la plus fiable possible.
+// pickerHandle : fenêtre « Enregistrer sous » déjà ouverte (doit l'être juste après le toucher).
+async function askSaveHandle(name,mime,ext,desc){
+  if(!window.showSaveFilePicker) return null;
+  try{ return await window.showSaveFilePicker({suggestedName:name,types:[{description:desc,accept:{[mime]:[ext]}}]}); }
+  catch(e){ if(e&&e.name==="AbortError") return "cancel"; return null; }
+}
+async function saveFile(blob,name,handle){
+  if(handle&&handle!=="cancel"){ const w=await handle.createWritable(); await w.write(blob); await w.close(); return "saved"; }
+  if(STANDALONE){ let f=null; try{ f=new File([blob],name,{type:blob.type}); }catch(e){}
+    if(f&&navigator.canShare&&navigator.canShare({files:[f]})){ try{ await navigator.share({files:[f],title:name}); return "shared"; }catch(e){ if(e&&e.name==="AbortError") return "cancel"; } } }
+  downloadBlob(blob,name); return "downloaded";
+}
+function openBlob(blob){ const u=URL.createObjectURL(blob); const w=window.open(u,"_blank"); if(!w) location.href=u; setTimeout(()=>URL.revokeObjectURL(u),120000); }
 function downloadBlob(blob,name){ const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),30000); }
 function ago(t){ if(!t) return "jamais"; const s=(Date.now()-t)/1000; if(s<60) return "à l'instant"; if(s<3600) return `il y a ${Math.round(s/60)} min`; if(s<86400) return `il y a ${Math.round(s/3600)} h`; const d=Math.round(s/86400); return d===1?"hier":`il y a ${d} jours`; }
 
@@ -299,11 +318,15 @@ async function reactivate(){
   renderHome();
 }
 async function manualBackup(){
-  try{ const json=await buildBackup(); const d=new Date().toISOString().slice(0,10);
-    downloadBlob(new Blob([json],{type:"application/json"}),`carnet-recettes-${d}.json`);
+  const name=`carnet-recettes-${new Date().toISOString().slice(0,10)}.json`;
+  try{
+    const handle=await askSaveHandle(name,"application/json",".json","Sauvegarde du carnet"); // tout de suite, pendant le toucher
+    if(handle==="cancel") return;
+    const res=await saveFile(new Blob([await buildBackup()],{type:"application/json"}),name,handle);
+    if(res==="cancel") return;
     if(bk.state!=="ok"){ bk.last=Date.now(); bk.pending=0; await store.setMeta("lastBackup",bk.last); await store.setMeta("pending",0); }
-    toast("Sauvegarde enregistrée dans « Téléchargements »",3500); renderHome();
-  }catch(e){ toast("La sauvegarde n'a pas marché."); }
+    toast(res==="saved"?"Sauvegarde enregistrée ✔":res==="shared"?"Sauvegarde envoyée ✔":"Sauvegarde enregistrée dans « Téléchargements »",3500); renderHome();
+  }catch(e){ console.error(e); toast("La sauvegarde n'a pas marché."); }
 }
 async function restoreFile(file){
   try{
@@ -373,6 +396,7 @@ function renderHome(){
        <button class="btn" id="bkrs">↺ Restaurer</button>
      </div>
      <p class="hint">Le fichier de sauvegarde contient toutes les recettes et les photos. Copiez-le de temps en temps ailleurs (clé USB, ordinateur…) : si la tablette est perdue, il permet de tout récupérer.</p></div>`:""}
+   <p class="version">Version ${APP_VERSION} du ${APP_DATE}</p>
   `;
   const on=(id,f)=>{const e=$(id); if(e) e.onclick=f;};
   on("#new",()=>openEditor(null)); on("#book",()=>go("livret"));
@@ -623,7 +647,7 @@ let livretSel=null;
 function renderLivret(){
   if(!livretSel) livretSel=new Set(recettes.map(r=>r.id));
   const list=sorted(recettes); let cur=null;
-  $("#bar").innerHTML=`<div class="savebar"><div class="in"><span class="muted" id="lst" style="flex:1"></span><button class="btn primary big" id="gen">📖 Télécharger le livret (PDF)</button></div></div>`;
+  $("#bar").innerHTML=`<div class="savebar"><div class="in"><span class="muted" id="lst" style="flex:1"></span><button class="btn primary big" id="gen">📖 Créer le livret (PDF)</button></div></div>`;
   $("#app").innerHTML=`
    <div class="row" style="margin-bottom:14px"><button class="btn" id="back">← Retour</button></div>
    <div class="sec"><h2>📖 Le livret</h2>
@@ -660,7 +684,7 @@ async function genPdf(){
     const name=(livre.titre||"livret").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-zA-Z0-9]+/g,"-").replace(/^-|-$/g,"").toLowerCase()||"livret";
     lastPdf={blob:new Blob([bytes],{type:"application/pdf"}),name:`${name}-${new Date().toISOString().slice(0,10)}.pdf`};
     st.textContent="Livret prêt ✔";
-    showPdfActions(); try{ downloadBlob(lastPdf.blob,lastPdf.name); }catch(e){}
+    showPdfActions(); const o=$("#pdfout"); if(o) o.scrollIntoView({block:"center",behavior:"smooth"});
   }catch(e){ console.error(e); st.textContent="Le livret n'a pas pu être créé."; $("#pdfout").innerHTML=`<div class="notice">Erreur : ${esc(e&&e.message||e)}</div>`; }
   btn.disabled=false;
 }
@@ -668,10 +692,15 @@ function showPdfActions(){
   const el=$("#pdfout"); if(!el||!lastPdf) return;
   let file=null; try{ file=new File([lastPdf.blob],lastPdf.name,{type:"application/pdf"}); }catch(e){}
   const canShare=!!(file&&navigator.canShare&&navigator.canShare({files:[file]}));
-  el.innerHTML=`<div class="banner ok"><span class="t">📖 Le livret est prêt. Il est dans « Téléchargements ». S'il n'y est pas, retéléchargez-le ou partagez-le.</span>
-    <button class="btn" id="pdl">⬇ Retélécharger</button><button class="btn" id="pop">👁 Ouvrir le PDF</button>${canShare?`<button class="btn primary" id="psh">↗ Partager / imprimer</button>`:""}</div>`;
-  $("#pdl").onclick=()=>downloadBlob(lastPdf.blob,lastPdf.name);
-  $("#pop").onclick=()=>{ const u=URL.createObjectURL(lastPdf.blob); const w=window.open(u,"_blank"); if(!w) location.href=u; };
+  const canSave=!!window.showSaveFilePicker || !STANDALONE;
+  el.innerHTML=`<div class="banner ok" style="flex-direction:column;align-items:stretch">
+    <span class="t" style="flex:none">📖 Le livret est prêt ! Touchez « Voir le livret » : la page qui s'ouvre permet de l'enregistrer ou de l'imprimer.${STANDALONE?" Ensuite, touchez « retour » pour revenir au carnet.":""}</span>
+    <div class="row"><button class="btn primary big" id="pop">👁 Voir le livret</button>
+    ${canSave?`<button class="btn" id="psv">💾 Enregistrer</button>`:""}
+    ${canShare?`<button class="btn" id="psh">↗ Partager / imprimer</button>`:""}</div></div>`;
+  $("#pop").onclick=()=>openBlob(lastPdf.blob);
+  if(canSave) $("#psv").onclick=async()=>{ const h=await askSaveHandle(lastPdf.name,"application/pdf",".pdf","Livret PDF"); if(h==="cancel") return;
+    try{ const r=await saveFile(lastPdf.blob,lastPdf.name,h); if(r==="saved") toast("Livret enregistré ✔"); }catch(e){ toast("L'enregistrement n'a pas marché : utilisez « Voir le livret »."); } };
   if(canShare) $("#psh").onclick=()=>navigator.share({files:[file],title:livre.titre||"Livret"}).catch(()=>{});
 }
 async function buildPdf(sel,progress){
@@ -781,7 +810,7 @@ async function buildPdf(sel,progress){
 history.replaceState({v:"home"},"");
 render();
 (async()=>{ await initBackup().catch(()=>{ bk.state=(canPickDir||canPickFile)?"none":"unsupported"; }); await loadAll(); if(bk.state==="ok"&&bk.pending>0) scheduleBackup(); })();
-if("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+if("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js?v="+encodeURIComponent(APP_VERSION)).catch(()=>{});
 </script>
 </body>
 </html>

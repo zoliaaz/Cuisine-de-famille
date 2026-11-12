@@ -1,5 +1,6 @@
 // Permet d'ouvrir le carnet sans internet (les recettes, elles, sont toujours sur la tablette).
-const CACHE = "carnet-v4";
+// La version vient de index.html (sw.js?v=…) : rien à changer ici.
+const CACHE = "carnet-" + (new URL(self.location).searchParams.get("v") || "0");
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "pdf-lib.min.js"];
 
 self.addEventListener("install", e => {
